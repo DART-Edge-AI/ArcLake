@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arc Lake</title>
+    <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.140.0/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://unpkg.com/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://unpkg.com/three@0.140.0/examples/js/exporters/GLTFExporter.js"></script>
+    <style>
+        body, html {
+            margin: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #menu {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            width: 100%;
+            box-sizing: border-box;
+            color: white;
+        }
+        #menu button, #menu input[type="range"] {
+            margin: 0 10px;
+        }
+        #menu button {
+            color: white;
+            font-weight: bold;
+            background-color: deepskyblue;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            padding: 10px;
+        }
+        #menu input[type="range"] {
+            width: 150px;
+        }
+        #canvas-container {
+            position: relative;
+            width: 875px;
+            height: 875px;
+            margin-top: 50px;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        .infoBox {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            pointer-events: all;
+            max-width: 300px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .infoBox button {
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            width: 100px;
+            height: 50px;
+            border: none;
+            background-color: deepskyblue;
+            display: block;
+            margin: 15px auto 0 auto;
+            pointer-events: all;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <button id="exportPNGButton">Export to PNG</button>
+        <button id="exportGLBButton">Export to GLB</button>
+        <button id="dismissAllButton">Dismiss All</button>
+        <label>Key Light: <input type="range" id="light1" min="0" max="2" step="0.1" value="1"></label>
+        <label>Fill Light: <input type="range" id="light2" min="0" max="2" step="0.1" value="1"></label>
+        <label>Back Light: <input type="range" id="light3" min="0" max="2" step="0.1" value="1"></label>
+    </div>
+    <div id="canvas-container"></div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.21.1/axios.min.js"></script>
+    <script>
+        let scene, camera, renderer, controls, keyLight, fillLight, backLight;
+        let infoBoxes = {};
+        let elementData = {};
+
+        function fetchData() {
+            const url = 'https://script.google.com/macros/s/AKfycbzM1LHcAy92sihh_B2ROfcKwRV1cv4FmIjI51mbtMoJXzU8vWn0xKhZ7sQu3wth1EdYiw/exec';
+
+            axios.get(url).then(response => {
+                elementData = response.data;
+            }).catch(error => {
+                console.error('Error fetching data:', error);
+            });
+        }
+
+        function init() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(45, 1, 0.01, 10000);
+            camera.position.set(40, 30, 40);
+            console.log('Camera initialized at position:', camera.position);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(875, 875);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.xr.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffe0b0, 0.5);
+            scene.add(ambientLight);
+
+            keyLight = new THREE.DirectionalLight(0xffeba1, 0.50);
+            keyLight.position.set(-30, 50, 30);
+            keyLight.castShadow = true;
+            scene.add(keyLight);
+            configureShadows(keyLight);
+
+            fillLight = new THREE.DirectionalLight(0xffeba1, 0.65);
+            fillLight.position.set(30, 50, -30);
+            fillLight.castShadow = true;
+            scene.add(fillLight);
+            configureShadows(fillLight);
+
+            backLight = new THREE.DirectionalLight(0xffeba1, 0.35);
+            backLight.position.set(0, 50, -30);
+            backLight.castShadow = true;
+            scene.add(backLight);
+            configureShadows(backLight);
+
+            const loader = new THREE.GLTFLoader();
+            loader.load('https://static.wixstatic.com/3d/2451db_c551fbaf718742c18bf1039db3f05d52.glb', function (gltf) {
+                gltf.scene.traverse(function (node) {
+                    if (node.isMesh) {
+                        node.castShadow = true;
+                        node.receiveShadow = true;
+                        if (elementData[node.name]) {
+                            node.userData = { name: node.name };
+                        }
+                    }
+                });
+                scene.add(gltf.scene);
+                animate();
+            }, undefined, function (error) {
+                console.error('Error loading GLB:', error);
+            });
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.target.set(0, 0, 0);
+            controls.update();
+
+            document.getElementById('exportPNGButton').addEventListener('click', function () {
+                renderer.render(scene, camera);
+                const dataURL = renderer.domElement.toDataURL('image/png');
+                const html = `<html><head><title>Exported PNG</title></head><body><br><br><p style="text-align:center; color: indigo; font-weight: bold;">Right-click or long-press on the image to save it.</p><img src="${dataURL}" style="max-width: 100%; display: block; margin: auto; background: #FFF;"/></body></html>`;
+                const win = window.open();
+                win.document.write(html);
+            });
+
+            document.getElementById('exportGLBButton').addEventListener('click', function () {
+                const exporter = new THREE.GLTFExporter();
+                exporter.parse(scene, function (glb) {
+                    const blob = new Blob([glb], { type: 'model/gltf-binary' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    a.download = 'Arc Lake.glb';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }, { binary: true });
+            });
+
+            document.getElementById('dismissAllButton').addEventListener('click', function () {
+                for (let key in infoBoxes) {
+                    dismissInfo(key);
+                }
+            });
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2();
+
+            window.addEventListener('click', onDocumentClick, false);
+            window.addEventListener('touchstart', onDocumentTouch, false);
+
+            fetchData();
+        }
+
+        function configureShadows(light) {
+            light.shadow.mapSize.width = 2048;
+            light.shadow.mapSize.height = 2048;
+            light.shadow.camera.near = 0.5;
+            light.shadow.camera.far = 150;
+            light.shadow.camera.left = -50;
+            light.shadow.camera.right = 50;
+            light.shadow.camera.top = 50;
+            light.shadow.camera.bottom = -50;
+            light.shadow.radius = 10;
+        }
+
+        function onDocumentClick(event) {
+            event.preventDefault();
+            mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+            mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
+
+            
+            
+const intersects = raycaster.intersectObjects(scene.children, true);
+if (intersects.length > 0) {
+  const intersectedObject = intersects[0].object;
+  if (intersectedObject.userData.name) {
+    showInfo(intersectedObject.userData.name, intersects[0].point);
+  }
+}
+}
+
+function onDocumentTouch(event) {
+  if (event.touches.length === 1) {
+    event.preventDefault();
+    mouse.x = (event.touches[0].clientX / renderer.domElement.clientWidth) * 2 - 1;
+    mouse.y = -(event.touches[0].clientY / renderer.domElement.clientHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(scene.children, true);
+    if (intersects.length > 0) {
+      const intersectedObject = intersects[0].object;
+      if (intersectedObject.userData.name) {
+        showInfo(intersectedObject.userData.name, intersects[0].point);
+      }
+    }
+  }
+}
+
+function showInfo(name, position) {
+  if (infoBoxes[name] && infoBoxes[name].style.display === 'block') {
+    return;
+  }
+
+  const data = elementData[name];
+  const content = data ?
+    `Neutrons: ${data.Neutrons}, Protons: ${data.Protons}, Electrons: ${data.Electrons}, Number of Orbits: ${data["Number of Orbits"]}, Orbits: [K: ${data["Orbit K"]}, L: ${data["Orbit L"]}, M: ${data["Orbit M"]}, N: ${data["Orbit N"]}, O: ${data["Orbit O"]}, P: ${data["Orbit P"]}, Q: ${data["Orbit Q"]}, R: ${data["Orbit R"]}]` :
+    'No data available';
+  let infoBox = infoBoxes[name];
+  if (!infoBox) {
+    infoBox = document.createElement('div');
+    infoBox.className = 'infoBox';
+    infoBox.innerHTML = `
+                    <h2>${name}</h2>
+                    <p>${content}</p>
+                    <button onclick="dismissInfo('${name}')">Close</button>
+                `;
+    document.getElementById('canvas-container').appendChild(infoBox);
+    infoBoxes[name] = infoBox;
+  } else {
+    infoBox.querySelector('p').innerText = content;
+  }
+
+  // Convert 3D position to 2D screen position
+  const vector = new THREE.Vector3(position.x, position.y, position.z);
+  vector.project(camera);
+
+  const x = (vector.x * 0.5 + 0.5) * (renderer.domElement.clientWidth);
+  const y = (vector.y * -0.5 + 0.5) * (renderer.domElement.clientHeight);
+
+  infoBox.style.left = `${x}px`;
+  infoBox.style.top = `${y}px`;
+  infoBox.style.display = 'block';
+}
+
+window.dismissInfo = function dismissInfo(name) {
+  const infoBox = infoBoxes[name];
+  if (infoBox) {
+    infoBox.style.display = 'none';
+  }
+};
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+init();
+  </script> </body> </html>
