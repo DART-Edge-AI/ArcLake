@@ -1,0 +1,353 @@
+<!--
+   Copyright MIT © <2024> <Justin Venable>
+ * Arc Lake Elements and Articren Wave With molecule script implementation made by Francesco Trillini.
+ * Copyright MIT © <2013> <Francesco Trillini>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated 
+ * documentation files (the "Software"), to deal in the Software without restriction, including without limitation 
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and 
+ * to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ 
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
+ * INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR 
+ * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE 
+ * FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+-->
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arc Lake Elements</title>
+    <style>
+        body {
+           // background-color: darkslategray;
+            padding-top: 50px;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        canvas {
+            display: block;
+            margin-top: 100px; /* Adjusted to make room for two rows of menu */
+            width: 875px;
+            height: 875px;
+        }
+        #menu {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+        .menu-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+        select, button {
+            color: white;
+            font-weight: bold;
+            padding: 10px;
+            background-color: deepskyblue;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            font-size: 16px;
+        }
+        #attractionSlider {
+            width: 150px;
+        }
+    </style>
+</head>
+<body>
+    <div id="menu">
+        <div class="menu-row">
+            <select id="atomSelector" multiple></select>
+            <button id="startSimulationButton">Articren Wave | Start</button>
+            <button id="stopSimulationButton">Articren Wave | Stop</button>
+        </div>
+        <div class="menu-row">
+            <button id="exportButton">Export as PNG</button>
+            <button id="exportGLTFButton">Export as GLTF</button>
+            <input type="range" id="attractionSlider" min="0.0001" max="0.005" step="0.0001" value="0.0008">
+            <label for="attractionSlider" style="color: white;">Attraction</label>
+        </div>
+    </div>
+    <canvas id="webglCanvas" width="875" height="875"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, 875 / 875, 0.01, 10000);
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webglCanvas'), antialias: true, alpha: true });
+            renderer.setSize(875, 875);
+            renderer.setClearColor(0x000000, 0); // Set canvas to be transparent
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            // Main light
+            const light1 = new THREE.PointLight(0xffffff, 1.3, 100);
+            light1.position.set(10, 10, 10);
+            scene.add(light1);
+
+            // Second light (25% dimmer)
+            const light2 = new THREE.PointLight(0xffffff, 0.75, 100);
+            light2.position.set(-10, 10, 10);
+            scene.add(light2);
+
+            // Third light (same brightness as the combined front lights)
+            const light3 = new THREE.PointLight(0xffffff, 1.75, 100);
+            light3.position.set(0, -10, -10);
+            scene.add(light3);
+
+            camera.position.z = 30;
+
+            const atomSelector = document.getElementById('atomSelector');
+            const startSimulationButton = document.getElementById('startSimulationButton');
+            const stopSimulationButton = document.getElementById('stopSimulationButton');
+            const exportButton = document.getElementById('exportButton');
+            const exportGLTFButton = document.getElementById('exportGLTFButton');
+            const attractionSlider = document.getElementById('attractionSlider');
+
+            let attraction = parseFloat(attractionSlider.value);
+            let isSimulating = false;
+
+            function fetchData() {
+                const scriptURL = 'https://script.google.com/macros/s/AKfycbyDI4FsSWKaG9nklipdE_vxTcWJQAZLMkiBV2DgAhU9-gh3iQyxpCbbvQtKUkxzk5wqYg/exec'; // Replace with your Apps Script URL
+                fetch(scriptURL)
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error('Network response was not ok ' + response.statusText);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        populateMenu(data);
+                        // Set default atom to the last one in the list
+                        const defaultAtom = data[data.length - 1];
+                        if (defaultAtom) {
+                            atomSelector.value = JSON.stringify(defaultAtom);
+                            loadAtom(defaultAtom, 0); // Load default atom immediately
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching data:', error);
+                    });
+            }
+
+            function populateMenu(data) {
+                data.forEach((item, index) => {
+                    if (index > 0) { // Skip header row
+                        const option = document.createElement('option');
+                        option.value = JSON.stringify(item);
+                        option.text = item.elementName;
+                        atomSelector.add(option);
+                    }
+                });
+
+                atomSelector.addEventListener('change', loadAtoms);
+            }
+
+            function loadAtoms() {
+                const selectedOptions = Array.from(atomSelector.selectedOptions);
+                selectedOptions.forEach((option, idx) => {
+                    const atom = JSON.parse(option.value);
+                    loadAtom(atom, idx);
+                });
+            }
+
+            function loadAtom(atom, index) {
+                const spacing = 5; // Adjust spacing between atoms
+                const protons = parseInt(atom.protons);
+                const neutrons = parseInt(atom.neutrons);
+                const electrons = parseInt(atom.electrons);
+                const orbits = atom.electronOrbits;
+
+                const protonMaterial = new THREE.MeshPhongMaterial({ color: '#87CEEB' }); // Deep Sky Blue
+                const neutronMaterial = new THREE.MeshPhongMaterial({ color: '#2F4F4F' }); // Dark, deep, bluish-gray
+                const electronMaterial = new THREE.MeshPhongMaterial({ color: '#00BFFF' }); // Electric blue
+
+                // Create protons
+                for (let i = 0; i < protons; i++) {
+                    const proton = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), protonMaterial);
+                    proton.position.set(
+                        (Math.random() - 0.5) + index * spacing, 
+                        (Math.random() - 0.5), 
+                        (Math.random() - 0.5)
+                    ).multiplyScalar(2);
+                    addPhysicsAttributes(proton);
+                    scene.add(proton);
+                }
+
+                // Create neutrons
+                for (let i = 0; i < neutrons; i++) {
+                    const neutron = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), neutronMaterial);
+                    neutron.position.set(
+                        (Math.random() - 0.5) + index * spacing, 
+                        (Math.random() - 0.5), 
+                        (Math.random() - 0.5)
+                    ).multiplyScalar(2);
+                    addPhysicsAttributes(neutron);
+                    scene.add(neutron);
+                }
+
+                // Create electron orbits
+                orbits.forEach((electronsInOrbit, orbitIndex) => {
+                    const radius = 4 + orbitIndex * 2;
+                    for (let i = 0; i < electronsInOrbit; i++) {
+                        const angle = (i / electronsInOrbit) * Math.PI * 2;
+                        const x = Math.cos(angle) * radius;
+                        const y = Math.sin(angle) * radius;
+                        const electron = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 32), electronMaterial);
+                        electron.position.set(
+                            x + index * spacing, 
+                            y, 
+                            0
+                        );
+                        addPhysicsAttributes(electron);
+                        scene.add(electron);
+                    }
+                });
+                renderer.render(scene, camera); // Render the scene immediately after loading the atom
+
+                // Store initial positions
+                scene.children.forEach((obj) => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.initialPosition = obj.position.clone();
+                    }
+                });
+            }
+
+            function addPhysicsAttributes(obj) {
+                obj.userData = {
+                    velocity: new THREE.Vector3(
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01
+                    ),
+                    friction: 0.98,
+                    attraction: attraction,
+                    initialPosition: obj.position.clone() // Store initial position
+                };
+                if (isSimulating) {
+                    obj.userData.velocity = new THREE.Vector3(
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01
+                    );
+                } else {
+                    obj.userData.velocity.set(0, 0, 0);
+                }
+            }
+
+            function clearScene() {
+                while (scene.children.length > 0) {
+                    scene.remove(scene.children[0]);
+                }
+                scene.add(light1);
+                scene.add(light2);
+                scene.add(light3);
+            }
+
+            function applyPhysics() {
+                if (isSimulating) {
+                    scene.children.forEach(obj => {
+                        if (obj instanceof THREE.Mesh) {
+                            obj.position.add(obj.userData.velocity);
+                            obj.userData.velocity.multiplyScalar(obj.userData.friction);
+
+                            scene.children.forEach(otherObj => {
+                                if (otherObj !== obj && otherObj instanceof THREE.Mesh) {
+                                    const distance = obj.position.distanceTo(otherObj.position);
+                                    if (distance < 1) {
+                                        const direction = new THREE.Vector3().subVectors(otherObj.position, obj.position).normalize();
+                                        obj.userData.velocity.add(direction.multiplyScalar(obj.userData.attraction));
+                                        otherObj.userData.velocity.sub(direction.multiplyScalar(obj.userData.attraction));
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                applyPhysics();
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            function exportAsPNG() {
+                renderer.render(scene, camera);
+                const dataURL = renderer.domElement.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.href = dataURL;
+                link.download = 'atom.png';
+                link.click();
+            }
+
+            function exportAsGLTF() {
+                const exporter = new THREE.GLTFExporter();
+                exporter.parse(scene, function(result) {
+                    const output = JSON.stringify(result, null, 2);
+                    const blob = new Blob([output], { type: 'application/gltf' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'element.gltf';
+                    link.click();
+                });
+            }
+
+            function startSimulation() {
+                isSimulating = true;
+                scene.children.forEach(obj => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.velocity = new THREE.Vector3(
+                            Math.random() * 0.02 - 0.01,
+                            Math.random() * 0.02 - 0.01,
+                            Math.random() * 0.02 - 0.01
+                        );
+                    }
+                });
+            }
+
+            function stopSimulation() {
+                isSimulating = false;
+                scene.children.forEach(obj => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.velocity.set(0, 0, 0);
+                    }
+                });
+                renderer.render(scene, camera); // Render the scene immediately after stopping the simulation
+            }
+
+            startSimulationButton.addEventListener('click', startSimulation);
+            stopSimulationButton.addEventListener('click', stopSimulation);
+            exportButton.addEventListener('click', exportAsPNG);
+            exportGLTFButton.addEventListener('click', exportAsGLTF);
+            attractionSlider.addEventListener('input', () => {
+                attraction = parseFloat(attractionSlider.value);
+                scene.children.forEach(obj => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.attraction = attraction;
+                    }
+                });
+            });
+
+            fetchData();
+            animate(); // Start the animation loop
+        });
+    </script>
+</body>
+</html>
