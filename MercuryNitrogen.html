@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mercury Edge Lab</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+         //   background-color: #333;
+            color: white;
+        }
+        .menu {
+           // background-color: #007bff;
+            color: white;
+            padding: 15px;
+            text-align: center;
+        }
+        .content {
+            margin: 50px auto 0;
+            padding-top: 50px;
+            width: 875px;
+            text-align: center;
+        }
+        .parameter-group {
+            margin-bottom: 20px;
+        }
+        label {
+            color: white;
+            margin: 5px;
+        }
+        input, select {
+            color: #333;
+            background-color: whitesmoke;
+            border: none;
+            padding: 10px;
+            margin: 5px;
+        }
+        input::placeholder {
+            color: #333;
+        }
+        button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            cursor: pointer;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        canvas {
+            width: 875px;
+            height: 875px;
+            display: block;
+            margin: 50px auto 0;
+            background: transparent;
+        }
+        #results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="menu">
+        <h1>Mercury Edge Lab</h1>
+    </div>
+    <div class="content">
+        <div class="parameter-group">
+            <label for="distance">Distance (meters): </label>
+            <input type="number" id="distance" placeholder="Distance" step="1">
+        </div>
+        <div class="parameter-group">
+            <label for="pressure">Pressure (units of PSI): </label>
+            <input type="number" id="pressure" placeholder="PSI" value="1">
+        </div>
+        <div class="parameter-group">
+            <label for="velocity">Velocity (mph): </label>
+            <input type="number" id="velocity" placeholder="Velocity">
+        </div>
+        <div class="parameter-group">
+            <label for="frequency">Frequency (GHz): </label>
+            <input type="number" id="frequency" placeholder="GHz">
+        </div>
+        <div class="parameter-group">
+            <label for="operation1">Operation for Pressure and Velocity: </label>
+            <select id="operation1">
+                <option value="exponent">Exponent</option>
+                <option value="multiply">Multiply</option>
+                <option value="divide">Divide</option>
+            </select>
+        </div>
+        <div class="parameter-group">
+            <label for="operation2">Operation for Frequency with the result of Pressure and Velocity: </label>
+            <select id="operation2">
+                <option value="exponent">Exponent</option>
+                <option value="multiply">Multiply</option>
+                <option value="divide">Divide</option>
+            </select>
+        </div>
+        <button onclick="startSimulation()">Start Simulation</button>
+        <canvas id="simulationCanvas"></canvas>
+        <div id="results"></div>
+    </div>
+    <script src="https://unpkg.com/three@0.140.0/build/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.140.0/examples/js/controls/OrbitControls.js"></script>
+    <script>
+        function startSimulation() {
+            const distance = parseFloat(document.getElementById('distance').value) || 0;
+            const pressure = parseFloat(document.getElementById('pressure').value) * 14.7 || 14.7;
+            const velocity = parseFloat(document.getElementById('velocity').value) || 0;
+            const frequency = parseFloat(document.getElementById('frequency').value) || 0;
+            const operation1 = document.getElementById('operation1').value;
+            const operation2 = document.getElementById('operation2').value;
+            
+            let result1;
+            if (operation1 === 'exponent') {
+                result1 = Math.pow(pressure, velocity);
+            } else if (operation1 === 'multiply') {
+                result1 = pressure * velocity;
+            } else if (operation1 === 'divide') {
+                result1 = pressure / velocity;
+            }
+            
+            let finalResult;
+            if (operation2 === 'exponent') {
+                finalResult = Math.pow(result1, frequency);
+            } else if (operation2 === 'multiply') {
+                finalResult = result1 * frequency;
+            } else if (operation2 === 'divide') {
+                finalResult = result1 / frequency;
+            }
+            
+            document.getElementById('results').innerText = `Result: ${finalResult.toFixed(2)}`;
+            
+            // Initialize Three.js scene
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, 875 / 875, 0.01, 100000);
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('simulationCanvas'), alpha: true });
+            renderer.setClearColor( 0x000000, 0 ); // Set background color to transparent
+            renderer.setSize(875, 875);
+            
+            // Orbit controls
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
+            controls.enableZoom = true;
+            
+            // Add Mercury sphere
+            const mercuryGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const mercuryMaterial = new THREE.MeshPhongMaterial({ color: 0xaaaaaa, shininess: 100 });
+            const mercurySphere = new THREE.Mesh(mercuryGeometry, mercuryMaterial);
+            scene.add(mercurySphere);
+            
+            // Add Nitrogen sphere
+            const nitrogenGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const nitrogenMaterial = new THREE.MeshPhongMaterial({ color: 0x87CEEB, transparent: true, opacity: 0.5 });
+            const nitrogenSphere = new THREE.Mesh(nitrogenGeometry, nitrogenMaterial);
+            nitrogenSphere.position.x = distance || 2; // Set initial distance between the spheres
+            scene.add(nitrogenSphere);
+            
+            // Add light
+            const light = new THREE.PointLight(0xffffff);
+            light.position.set(10, 10, 10);
+            scene.add(light);
+            
+            camera.position.z = 5;
+            
+            const animate = function () {
+                requestAnimationFrame(animate);
+                mercurySphere.rotation.x += 0.01;
+                mercurySphere.rotation.y += 0.01;
+                nitrogenSphere.rotation.x += 0.01;
+                nitrogenSphere.rotation.y += 0.01;
+                controls.update();
+                renderer.render(scene, camera);
+            };
+            animate();
+        }
+    </script>
+</body>
+</html>
