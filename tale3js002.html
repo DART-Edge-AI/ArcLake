@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Periodic Table of Elements</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: indigo;
+        }
+
+        canvas {
+            display: block;
+            margin-top: 50px;
+            width: 875px;
+            height: 875px;
+        }
+
+        .scroll-wrapper {
+            width: 875px;
+            height: 1400px;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border: none;
+            background-color: transparent;
+            position: relative;
+        }
+
+        .periodic-table {
+            display: grid;
+            grid-template-rows: repeat(11, auto);
+            grid-template-columns: repeat(18, auto);
+            gap: 2px;
+            width: 100%;
+            margin-top: 50px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .element, .placeholder {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 2px;
+            transition: transform 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+
+        .element {
+            background: rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+        }
+
+        .element:hover {
+            transform: scale(1.25);
+        }
+
+        .solid { background: rgba(255, 0, 0, 0.1); }
+        .liquid { background: rgba(0, 0, 255, 0.1); }
+        .gas { background: rgba(0, 255, 0, 0.1); }
+        .synthetic { background: rgba(255, 255, 0, 0.1); }
+        .placeholder { visibility: hidden; background: none; }
+        .element.selected { border: 2px solid yellow; }
+
+        .menu {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .menu-row {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        button {
+            color: white;
+            font-weight: bold;
+            padding: 10px;
+            background-color: deepskyblue;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            font-size: 16px;
+        }
+
+        #attractionSlider { width: 150px; }
+    </style>
+</head>
+<body>
+    <canvas id="webglCanvas" width="875" height="875"></canvas>
+    <div class="menu">
+        <div class="menu-row">
+            <button id="startSimulationButton">Articren Wave | Start</button>
+            <button id="stopSimulationButton">Articren Wave | Stop</button>
+        </div>
+        <div class="menu-row">
+            <button id="exportButton">Export as PNG</button>
+            <button id="exportGLTFButton">Export as GLTF</button>
+            <input type="range" id="attractionSlider" min="0.0001" max="0.005" step="0.0001" value="0.0008">
+            
+            <label for="attractionSlider" style="color: white;">Attraction</label>
+        </div>
+        <div class="menu-row">
+          <br>
+          <br>
+          <br>
+          <br>
+    <br>
+    <br>
+            <label for="multiSelectToggle" style="color: white;">Multiple Selection Mode</label>
+            <input type="checkbox" id="multiSelectToggle" style="margin-left: 10px;">
+        </div>
+        <div class="scroll-wrapper">
+            <div class="periodic-table" id="periodicTable"></div>
+        </div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const scene = new THREE.Scene();
+            const camera = new THREE.PerspectiveCamera(75, 875 / 875, 0.01, 10000);
+            const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('webglCanvas'), antialias: true, alpha: true });
+            renderer.setSize(875, 875);
+            renderer.setClearColor(0x000000, 0); // Set canvas to be transparent
+            const controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            const light1 = new THREE.PointLight(0xffffff, 1.3, 100);
+            light1.position.set(10, 10, 10);
+            scene.add(light1);
+
+            const light2 = new THREE.PointLight(0xffffff, 0.75, 100);
+            light2.position.set(-10, 10, 10);
+            scene.add(light2);
+
+            const light3 = new THREE.PointLight(0xffffff, 1.75, 100);
+            light3.position.set(0, -10, -10);
+            scene.add(light3);
+
+            camera.position.z = 30;
+
+            const startSimulationButton = document.getElementById('startSimulationButton');
+            const stopSimulationButton = document.getElementById('stopSimulationButton');
+            const exportButton = document.getElementById('exportButton');
+            const exportGLTFButton = document.getElementById('exportGLTFButton');
+            const attractionSlider = document.getElementById('attractionSlider');
+            const multiSelectToggle = document.getElementById('multiSelectToggle');
+            const periodicTable = document.getElementById('periodicTable');
+
+            let attraction = parseFloat(attractionSlider.value);
+            let isSimulating = false;
+            let multiSelectMode = false;
+
+            function fetchData() {
+  const scriptURL = 'https://script.google.com/macros/s/AKfycbyDI4FsSWKaG9nklipdE_vxTcWJQAZLMkiBV2DgAhU9-gh3iQyxpCbbvQtKUkxzk5wqYg/exec?range=A2:A128,D2:D128';
+  fetch(scriptURL)
+    .then(response => {
+      if (!response.ok) {
+        throw new Error('Network response was not ok ' + response.statusText);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Fetched data:', data); // Debugging line
+      createPeriodicTable(data.slice(1)); // Skip the first row
+      const defaultAtom = data[data.length - 1];
+      if (defaultAtom) {
+        loadAtom(defaultAtom, 0); // Load default atom immediately
+      }
+    })
+    .catch(error => {
+      console.error('Error fetching data:', error);
+    });
+}
+
+function createPeriodicTable(elements) {
+                const periodicTable = document.getElementById('periodicTable');
+                elements.forEach((element, index) => {
+                    const elementDiv = document.createElement('div');
+                    elementDiv.classList.add('element');
+                    elementDiv.classList.add(getStateClass(element.electrons));
+                    elementDiv.innerHTML = `<strong>${element.elementName}</strong><p>Electrons: ${element.electrons}</p>`;
+                    elementDiv.dataset.elementData = JSON.stringify(element);
+
+                    elementDiv.addEventListener('click', () => {
+                        handleElementClick(elementDiv, element);
+                    });
+
+                    periodicTable.appendChild(elementDiv);
+
+                    // Insert placeholders as necessary
+                    if (index === 0) {
+                        for (let i = 0; i < 16; i++) {
+                            const placeholderDiv = document.createElement('div');
+                            placeholderDiv.classList.add('placeholder');
+                            periodicTable.appendChild(placeholderDiv);
+                        }
+                    }
+                    if (index === 3 || index === 11) {
+                        for (let i = 0; i < 10; i++) {
+                            const placeholderDiv = document.createElement('div');
+                            placeholderDiv.classList.add('placeholder');
+                            periodicTable.appendChild(placeholderDiv);
+                        }
+                    }
+                });
+            }
+
+            function handleElementClick(elementDiv, element) {
+                if (multiSelectMode) {
+                    elementDiv.classList.toggle('selected');                    updateSelectedElements();
+                } else {
+                    clearSelectedElements();
+                    elementDiv.classList.add('selected');
+                    clearScene();
+                    loadAtom(element, 0);
+                }
+            }
+
+            function clearSelectedElements() {
+                const selectedElements = document.querySelectorAll('.element.selected');
+                selectedElements.forEach(el => el.classList.remove('selected'));
+            }
+
+            function updateSelectedElements() {
+                const selectedElements = document.querySelectorAll('.element.selected');
+                clearScene();
+                selectedElements.forEach((el, idx) => {
+                    const atom = JSON.parse(el.dataset.elementData);
+                    loadAtom(atom, idx);
+                });
+            }
+
+            function loadAtom(atom, index) {
+                const spacing = 5; // Adjust spacing between atoms
+                const protons = parseInt(atom.protons);
+                const neutrons = parseInt(atom.neutrons);
+                const electrons = parseInt(atom.electrons);
+                const orbits = atom.electronOrbits;
+
+                const protonMaterial = new THREE.MeshPhongMaterial({ color: '#87CEEB' }); // Deep Sky Blue
+                const neutronMaterial = new THREE.MeshPhongMaterial({ color: '#2F4F4F' }); // Dark, deep, bluish-gray
+                const electronMaterial = new THREE.MeshPhongMaterial({ color: '#00BFFF' }); // Electric blue
+
+                // Create protons
+                for (let i = 0; i < protons; i++) {
+                    const proton = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), protonMaterial);
+                    proton.position.set(
+                        (Math.random() - 0.5) + index * spacing, 
+                        (Math.random() - 0.5), 
+                        (Math.random() - 0.5)
+                    ).multiplyScalar(2);
+                    addPhysicsAttributes(proton);
+                    scene.add(proton);
+                }
+
+                // Create neutrons
+                for (let i = 0; i < neutrons; i++) {
+                    const neutron = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 32), neutronMaterial);
+                    neutron.position.set(
+                        (Math.random() - 0.5) + index * spacing, 
+                        (Math.random() - 0.5), 
+                        (Math.random() - 0.5)
+                    ).multiplyScalar(2);
+                    addPhysicsAttributes(neutron);
+                    scene.add(neutron);
+                }
+
+                // Create electron orbits
+                orbits.forEach((electronsInOrbit, orbitIndex) => {
+                    const radius = 4 + orbitIndex * 2;
+                    for (let i = 0; i < electronsInOrbit; i++) {
+                        const angle = (i / electronsInOrbit) * Math.PI * 2;
+                        const x = Math.cos(angle) * radius;
+                        const y = Math.sin(angle) * radius;
+                        const electron = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 32), electronMaterial);
+                        electron.position.set(
+                            x + index * spacing, 
+                            y, 
+                            0
+                        );
+                        addPhysicsAttributes(electron);
+                        scene.add(electron);
+                    }
+                });
+                renderer.render(scene, camera); // Render the scene immediately after loading the atom
+
+                // Store initial positions
+                scene.children.forEach((obj) => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.initialPosition = obj.position.clone();
+                    }
+                });
+            }
+
+            function addPhysicsAttributes(obj) {
+                obj.userData = {
+                    velocity: new THREE.Vector3(
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01
+                    ),
+                    friction: 0.98,
+                    attraction: attraction,
+                    initialPosition: obj.position.clone() // Store initial position
+                };
+                if (isSimulating) {
+                    obj.userData.velocity = new THREE.Vector3(
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01,
+                        Math.random() * 0.02 - 0.01
+                    );
+                } else {
+                    obj.userData.velocity.set(0, 0, 0);
+                }
+            }
+
+            function clearScene() {
+                while (scene.children.length > 0) {
+                    scene.remove(scene.children[0]);
+                }
+                scene.add(light1);
+                scene.add(light2);
+                scene.add(light3);
+            }
+
+            function applyPhysics() {
+                if (isSimulating) {
+                    scene.children.forEach(obj => {
+                        if (obj instanceof THREE.Mesh) {
+                            obj.position.add(obj.userData.velocity);
+                            obj.userData.velocity.multiplyScalar(obj.userData.friction);
+
+                            scene.children.forEach(otherObj => {
+                                if (otherObj !== obj && otherObj instanceof THREE.Mesh) {
+                                    const distance = obj.position.distanceTo(otherObj.position);
+                                    if (distance < 1) {
+                                        const direction = new THREE.Vector3().subVectors(otherObj.position, obj.position).normalize();
+                                        obj.userData.velocity.add(direction.multiplyScalar(obj.userData.attraction));
+                                        otherObj.userData.velocity.sub(direction.multiplyScalar(obj.userData.attraction));
+                                    }
+                                }
+                            });
+                        }
+                    });
+                }
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                applyPhysics();
+                controls.update();
+                renderer.render(scene, camera);
+            }
+
+            function exportAsPNG() {
+                renderer.render(scene, camera);
+                const dataURL = renderer.domElement.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.href = dataURL;
+                link.download = 'atom.png';
+                link.click();
+            }
+
+            function exportAsGLTF() {
+                const exporter = new THREE.GLTFExporter();
+                exporter.parse(scene, function(result) {
+                    const output = JSON.stringify(result, null, 2);
+                    const blob = new Blob([output], { type: 'application/gltf' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(blob);
+                    link.download = 'element.gltf';
+                    link.click();
+                });
+            }
+
+            function startSimulation() {
+                isSimulating = true;
+                scene.children.forEach(obj => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.velocity = new THREE.Vector3(
+                            Math.random() * 0.02 - 0.01,
+                            Math.random() * 0.02 - 0.01,
+                            Math.random() * 0.02 - 0.01
+                        );
+                    }
+                });
+            }
+
+            function stopSimulation() {
+                isSimulating = false;
+                scene.children.forEach(obj => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.velocity.set(0, 0, 0);
+                    }
+                });
+                renderer.render(scene, camera); // Render the scene immediately after stopping the simulation
+            }
+
+            startSimulationButton.addEventListener('click', startSimulation);
+            stopSimulationButton.addEventListener('click', stopSimulation);
+            exportButton.addEventListener('click', exportAsPNG);
+            exportGLTFButton.addEventListener('click', exportAsGLTF);
+            attractionSlider.addEventListener('input', () => {
+                attraction = parseFloat(attractionSlider.value);
+                scene.children.forEach(obj => {
+                    if (obj instanceof THREE.Mesh) {
+                        obj.userData.attraction = attraction;
+                    }
+                });
+            });
+
+            multiSelectToggle.addEventListener('change', () => {
+                multiSelectMode = multiSelectToggle.checked;
+                if (!multiSelectMode) {
+                    clearSelectedElements();
+                    clearScene();
+                }
+            });
+
+            fetchData();
+            animate(); // Start the animation loop
+        });
+
+        function getStateClass(electrons) {
+            if (electrons <= 10) return 'gas';
+            if (electrons <= 20) return 'liquid';
+            if (electrons <= 40) return 'solid';
+            return 'synthetic';
+        }
+    </script>
+</body>
+</html>

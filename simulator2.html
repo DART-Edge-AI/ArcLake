@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3JS Particle Simulator</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 100;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 8px;
+            color: white;
+        }
+        .controls button, .controls select, .controls input {
+            display: block;
+            margin-bottom: 10px;
+            background: #333;
+            color: white;
+            border: none;
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .controls label {
+            margin-bottom: 5px;
+        }
+        .brush {
+            position: absolute;
+            border: 2px solid red;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .hidden {
+            display: none;
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/exporters/GLTFExporter.js"></script>
+</head>
+<body>
+    <div class="controls">
+        <label for="particleCount">Particle Count:</label>
+        <input type="number" id="particleCount" min="5000" max="5000000" value="5000">
+        <label for="brushSize">Brush Size:</label>
+        <input type="range" id="brushSize" min="1" max="100" value="10">
+        <label for="gravityStrength">Gravity Strength:</label>
+        <input type="range" id="gravityStrength" min="0" max="10" value="1">
+        <label for="particleColor">Particle Color:</label>
+        <input type="color" id="particleColor" value="#ffffff">
+        <button onclick="toggleBrush()">Toggle Brush</button>
+        <button onclick="toggleAddGravityPoint()">Add Gravity Point</button>
+        <label for="gravityIntensity">Gravity Intensity:</label>
+        <input type="range" id="gravityIntensity" min="0" max="10" value="1">
+        <label for="gravityVelocity">Velocity (m/s):</label>
+        <input type="range" id="gravityVelocity" min="0" max="50" value="0">
+        <label for="globalGravity">Global Gravity:</label>
+        <input type="number" id="globalGravity" value="9.81">  <!-- Default gravity value on Earth in m/s^2 -->
+        <button onclick="resetGravity()">Reset Gravity to Earth</button>
+        <button onclick="clearParticles()">Clear Particles</button>
+        <button onclick="exportSimulation()">Export Simulation</button>
+    </div>
+    <div class="brush hidden" id="brush"></div>
+    <script>
+        let scene, camera, renderer, particles = [], gravityPoints = [];
+        let brushSize = 10, gravityStrength = 1, particleCount = 5000;
+        let brushColor = 0xffffff;
+        let globalGravity = 9.81;
+        const brush = document.getElementById('brush');
+        let isBrushActive = false;
+        let isAddingGravityPoint = false;
+        let brushSphere, controls;
+
+        const clippingBounds = { x: 50, y: 50, z: 50 };  // Clipping bounds for the particles
+
+        init();
+        animate();
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+
+            renderer = new THREE.WebGLRenderer();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+
+            window.addEventListener('resize', onWindowResize, false);
+            document.getElementById('brushSize').addEventListener('input', updateBrushSize);
+            document.getElementById('gravityStrength').addEventListener('input', updateGravityStrength);
+            document.getElementById('particleCount').addEventListener('input', updateParticleCount);
+            document.getElementById('particleColor').addEventListener('input', updateParticleColor);
+            document.getElementById('globalGravity').addEventListener('input', updateGlobalGravity);
+
+            // Add gravity points
+            addGravityPoint(new THREE.Vector3(-2, 0, 0), 1, new THREE.Vector3(0, 0, 0));
+            addGravityPoint(new THREE.Vector3(2, 0, 0), 1, new THREE.Vector3(0, 0, 0));
+
+            // Brush sphere
+            const brushGeometry = new THREE.SphereGeometry(1, 32, 32);
+            const brushMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true });
+            brushSphere = new THREE.Mesh(brushGeometry, brushMaterial);
+            brushSphere.visible = false;
+            scene.add(brushSphere);
+
+            // Add event listeners for painting particles and adding gravity points
+            document.addEventListener('mousedown', onMouseDown, false);
+            document.addEventListener('mousemove', onMouseMove, false);
+            document.addEventListener('mouseup', onMouseUp, false);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            particles.forEach(p => {
+                // Apply global gravity
+                p.velocity.y -= globalGravity * 0.01;  // Adjust the multiplier as necessary for simulation scaling
+
+                gravityPoints.forEach(g => {
+                    const distance = g.mesh.position.distanceTo(p.position);
+                    const force = g.mesh.position.clone().sub(p.position).normalize().multiplyScalar(g.intensity / distance);
+                    p.velocity.add(force);
+                });
+
+                p.position.add(p.velocity);
+                p.rotation.x += 0.01;
+                p.rotation.y += 0.01;
+
+                // Remove particles that exit the clipping bounds
+                if (Math.abs(p.position.x) > clippingBounds.x || 
+                    Math.abs(p.position.y) > clippingBounds.y || 
+                    Math.abs(p.position.z) > clippingBounds.z) {
+                    scene.remove(p);
+                }
+            });
+
+            particles = particles.filter(p => scene.children.includes(p));  // Keep only particles that are still in the scene
+
+            gravityPoints.forEach(g => {
+                g.mesh.position.add(g.velocity);
+            });
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function clearParticles() {
+            particles.forEach(p => scene.remove(p));
+            particles = [];
+        }
+
+        function exportSimulation() {
+            const exporter = new THREE.GLTFExporter();
+            exporter.parse(scene, function(result) {
+                const output = JSON.stringify(result, null, 2);
+                const blob = new Blob([output], {type: 'application/json'});
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = 'simulation.json';
+                link.click();
+            });
+        }
+
+        function updateBrushSize(event) {
+            brushSize = event.target.value;
+            brush.style.width = brush.style.height = `${brushSize * 2}px`;
+            brushSphere.scale.set(brushSize / 10, brushSize / 10, brushSize / 10);  // Update brush sphere scale
+        }
+
+        function updateGravityStrength(event) {
+            gravityStrength = event.target.value;
+        }
+
+        function updateParticleCount(event) {
+            particleCount = event.target.value;
+        }
+
+        function updateParticleColor(event) {
+            brushColor = parseInt(event.target.value.replace('#', ''), 16);
+        }
+
+        function updateGlobalGravity(event) {
+            globalGravity = parseFloat(event.target.value);
+        }
+
+        function addGravityPoint(position, intensity, velocity) {
+            const geometry = new THREE.SphereGeometry(0.2, 32, 32);
+            const material = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            const gravityPoint = new THREE.Mesh(geometry, material);
+            gravityPoint.position.copy(position);
+            scene.add(gravityPoint);
+            gravityPoints.push({ mesh: gravityPoint, intensity: intensity, velocity: velocity });
+        }
+
+        function onMouseDown(event) {
+            if (isBrushActive) {
+                paintParticles(event);
+            } else if (isAddingGravityPoint) {
+                placeGravityPoint(event);
+            }
+        }
+
+function onMouseMove(event) {
+            if (isBrushActive || isAddingGravityPoint) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                const mouse = new THREE.Vector2(
+                    ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                    -((event.clientY - rect.top) / rect.height) * 2 + 1
+                );
+
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, camera);
+
+                const intersects = raycaster.intersectObjects([scene]);
+                const point = intersects.length > 0 ? intersects[0].point : new THREE.Vector3(mouse.x, mouse.y, 0);
+
+                brushSphere.position.copy(point);
+
+                const screenPosition = point.clone().project(camera);
+                const screenX = (screenPosition.x + 1) / 2 * window.innerWidth;
+                const screenY = -(screenPosition.y - 1) / 2 * window.innerHeight;
+
+                brush.style.left = `${screenX - brushSize}px`;
+                brush.style.top = `${screenY - brushSize}px`;
+
+                if (event.buttons > 0 && isBrushActive) {
+                    paintParticles(event);
+                }
+            }
+        }
+
+        function onMouseUp(event) {
+            // Stop painting or adding gravity point when mouse is released
+        }
+
+        function paintParticles(event) {
+            const geometry = new THREE.SphereGeometry(0.1, 32, 32);
+            const material = new THREE.MeshBasicMaterial({ color: brushColor });
+
+            for (let i = 0; i < particleCount; i++) {
+                const phi = Math.acos(2 * Math.random() - 1);
+                const theta = 2 * Math.PI * Math.random();
+                const distance = Math.random() * brushSize / 10;
+                const particle = new THREE.Mesh(geometry, material);
+                particle.position.set(
+                    brushSphere.position.x + distance * Math.sin(phi) * Math.cos(theta),
+                    brushSphere.position.y + distance * Math.sin(phi) * Math.sin(theta),
+                    brushSphere.position.z + distance * Math.cos(phi)
+                );
+                particle.velocity = new THREE.Vector3();
+                scene.add(particle);
+                particles.push(particle);
+            }
+        }
+
+        function placeGravityPoint(event) {
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2(
+                ((event.clientX - rect.left) / rect.width) * 2 - 1,
+                -((event.clientY - rect.top) / rect.height) * 2 + 1
+            );
+
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+
+            const intersects = raycaster.intersectObjects([scene]);
+            const point = intersects.length > 0 ? intersects[0].point : new THREE.Vector3(mouse.x, mouse.y, 0);
+
+            const intensity = parseFloat(document.getElementById('gravityIntensity').value);
+            const velocityValue = parseFloat(document.getElementById('gravityVelocity').value);
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * velocityValue,
+                (Math.random() - 0.5) * velocityValue,
+                (Math.random() - 0.5) * velocityValue
+            );
+
+            addGravityPoint(point, intensity, velocity);
+
+            // Reset to default for next gravity point
+            isAddingGravityPoint = false;
+            brush.classList.add('hidden');
+            brushSphere.visible = false;
+        }
+
+        function toggleBrush() {
+            isBrushActive = !isBrushActive;
+            isAddingGravityPoint = false;
+            brush.classList.toggle('hidden', !isBrushActive);
+            brushSphere.visible = isBrushActive;
+            const button = document.querySelector('button[onclick="toggleBrush()"]');
+            button.style.backgroundColor = isBrushActive ? '#0a0' : '#333';
+        }
+
+        function toggleAddGravityPoint() {
+            isAddingGravityPoint = !isAddingGravityPoint;
+            isBrushActive = false;
+            brush.classList.toggle('hidden', !isAddingGravityPoint);
+            brushSphere.visible = isAddingGravityPoint;
+            const button = document.querySelector('button[onclick="toggleAddGravityPoint()"]');
+            button.style.backgroundColor = isAddingGravityPoint ? '#0a0' : '#333';
+        }
+
+        function resetGravity() {
+            document.getElementById('globalGravity').value = 9.81;
+            globalGravity = 9.81;
+        }
+    </script>
+</body>
+</html>

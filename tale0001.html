@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Periodic Table of Elements</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: indigo;
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .title {
+            margin-top: 20px;
+        }
+        .periodic-table {
+            display: grid;
+            grid-template-columns: repeat(18, 1fr);
+            grid-gap: 5px;
+            margin-top: 50px;
+            width: 90%;
+        }
+        .element {
+            width: 100%;
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+            background: rgba(255, 255, 255, 0.1);
+            transition: transform 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .element:hover {
+            transform: scale(1.05);
+        }
+        .solid { background: rgba(255, 0, 0, 0.1); }
+        .liquid { background: rgba(0, 0, 255, 0.1); }
+        .gas { background: rgba(0, 255, 0, 0.1); }
+        .synthetic { background: rgba(255, 255, 0, 0.1); }
+    </style>
+</head>
+<body>
+    <div class="title">
+        <h1>Periodic Table of Elements</h1>
+    </div>
+    <div class="periodic-table" id="periodicTable"></div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchPeriodicTableData();
+        });
+
+        function fetchPeriodicTableData() {
+            fetch('https://script.google.com/macros/s/AKfycbyG7gw3NXYl25m7LJqWqVYUCUl8Y4CJZB9tIb6tVxP96imSRbAJwE6jlHzslNDxP6MvyQ/exec')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    createPeriodicTable(data);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function createPeriodicTable(elements) {
+            const periodicTable = document.getElementById('periodicTable');
+            const elementPositions = getElementPositions();
+
+            elements.forEach((element, index) => {
+                const elementDiv = document.createElement('div');
+                elementDiv.classList.add('element');
+                elementDiv.classList.add(getStateClass(element.electrons));
+                const position = elementPositions[element.name.toLowerCase()];
+                if (position) {
+                    elementDiv.style.gridColumnStart = position.column;
+                    elementDiv.style.gridRowStart = position.row;
+                    elementDiv.innerHTML = `<strong>${element.name}</strong><p>Electrons: ${element.electrons}</p>`;
+                    periodicTable.appendChild(elementDiv);
+                }
+            });
+        }
+
+        function getElementPositions() {
+            // Define the positions for each element in the periodic table
+            return {
+                hydrogen: { row: 1, column: 1 },
+                helium: { row: 1, column: 18 },
+                lithium: { row: 2, column: 1 },
+                beryllium: { row: 2, column: 2 },
+                boron: { row: 2, column: 13 },
+                carbon: { row: 2, column: 14 },
+                nitrogen: { row: 2, column: 15 },
+                oxygen: { row: 2, column: 16 },
+                fluorine: { row: 2, column: 17 },
+                neon: { row: 2, column: 18 },
+                // Continue adding the rest of the elements...
+                sodium: { row: 3, column: 1 },
+                magnesium: { row: 3, column: 2 },
+                aluminum: { row: 3, column: 13 },
+                silicon: { row: 3, column: 14 },
+                phosphorus: { row: 3, column: 15 },
+                sulfur: { row: 3, column: 16 },
+                chlorine: { row: 3, column: 17 },
+                argon: { row: 3, column: 18 },
+                // ... and so on.
+            };
+        }
+
+        function getStateClass(electrons) {
+            if (electrons <= 10) return 'gas';
+            if (electrons <= 20) return 'liquid';
+            if (electrons <= 40) return 'solid';
+            return 'synthetic';
+        }
+    </script>
+</body>
+</html>

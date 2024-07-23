@@ -1,0 +1,194 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Periodic Table of Elements</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: transparent;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            flex-direction: column;
+            background-color: indigo;
+        }
+
+        .title {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            top: 2%;
+            font-weight: bold;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+      .scroll-wrapper {
+            width: 875px;
+            height: 1400px;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            
+            border: none;
+            background-color: transparent;
+            position: relative;
+        }
+
+
+
+        .periodic-table {
+          
+            display: grid;
+            grid-template-rows: repeat(11, auto);
+            grid-template-columns: repeat(18, auto);
+            gap: 2px;
+            width: 80%;
+            margin-top: 50px;
+            backdrop-filter: blur(10px);
+        }
+        .element, .placeholder {
+          
+            position: relative;
+            width: 125px;
+            height: 125px;
+            padding: 10px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 2px;
+            transition: transform 0.3s;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+        }
+        .element {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .element:hover {
+            transform: scale(1.25);
+        }
+        .solid { background: rgba(255, 0, 0, 0.1); }
+        .liquid { background: rgba(0, 0, 255, 0.1); }
+        .gas { background: rgba(0, 255, 0, 0.1); }
+        .synthetic { background: rgba(255, 255, 0, 0.1); }
+        .placeholder {
+            visibility: hidden;
+            background: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">
+        <img src="https://raw.githubusercontent.com/DART-Edge-AI/Autumn/main/ArcLake.png" alt="Autumn" style="max-width: 20%; height:auto;">
+        <h1 style="color: white; font-weight: bold;">| Elements |</h1>
+<div class="scroll-wrapper">
+          <div class="periodic-table" id="periodicTable"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchPeriodicTableData();
+        });
+
+        function fetchPeriodicTableData() {
+            fetch('https://script.google.com/macros/s/AKfycbyG7gw3NXYl25m7LJqWqVYUCUl8Y4CJZB9tIb6tVxP96imSRbAJwE6jlHzslNDxP6MvyQ/exec')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('Data fetched successfully:', data);
+                    createPeriodicTable(data);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function createPeriodicTable(elements) {
+            const periodicTable = document.getElementById('periodicTable');
+            elements.forEach((element, index) => {
+                const elementDiv = document.createElement('div');
+                elementDiv.classList.add('element');
+                elementDiv.classList.add(getStateClass(element.electrons));
+                elementDiv.innerHTML = `<strong>${element.name}</strong><p>Electrons: ${element.electrons}</p>`;
+                
+                periodicTable.appendChild(elementDiv);
+
+                // Insert 16 placeholders after the first element (A1)
+                if (index === 0) {
+                    for (let i = 0; i < 16; i++) {
+                        const placeholderDiv = document.createElement('div');
+                        placeholderDiv.classList.add('placeholder');
+                        periodicTable.appendChild(placeholderDiv);
+                    }
+                }
+
+                // Insert 10 placeholders between elements 3 and 5
+                if (index === 3) {
+                    for (let i = 0; i < 10; i++) {
+                        const placeholderDiv = document.createElement('div');
+                        placeholderDiv.classList.add('placeholder');
+                        periodicTable.appendChild(placeholderDiv);
+                    }
+                }
+                // Insert 10 placeholders between elements 12 and 13
+                if (index === 11) {
+                    for (let i = 0; i < 10; i++) {
+                        const placeholderDiv = document.createElement('div');
+                        placeholderDiv.classList.add('placeholder');
+                        periodicTable.appendChild(placeholderDiv);
+                    }
+                }
+                /*
+                // Make row 9 entirely empty
+                if (index === elements.length - 1) {
+                    for (let i = 0; i < 18; i++) {
+                        const placeholderDiv = document.createElement('div');
+                        placeholderDiv.classList.add('placeholder');
+                        periodicTable.appendChild(placeholderDiv);
+                    }
+                }
+              */  
+            });
+/*
+            // Insert 3 placeholders at the beginning of row 10
+            for (let i = 0; i < 3; i++) {
+                const placeholderDiv = document.createElement('div');
+                placeholderDiv.classList.add('placeholder');
+                periodicTable.insertBefore(placeholderDiv, periodicTable.children[9 * 18 + i]);
+                
+            }
+
+            // Insert 3 placeholders at the beginning of row 11
+            for (let i = 0; i < 3; i++) {
+                const placeholderDiv = document.createElement('div');
+                placeholderDiv.classList.add('placeholder');
+                periodicTable.insertBefore(placeholderDiv, periodicTable.children[10 * 18 + i]);
+                
+            }
+            */
+        }
+
+        function getStateClass(electrons) {
+            if (electrons <= 10) return 'gas';
+            if (electrons <= 20) return 'liquid';
+            if (electrons <= 40) return 'solid';
+            return 'synthetic';
+        }
+    </script>
+</body>
+</html>
+

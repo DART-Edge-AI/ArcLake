@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arc Lake UI</title>
+    <style>
+        /* Basic styles for the layout */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <img src="logo.png" alt="Project Logo" class="logo">
+        <h2>Arc Lake Project</h2>
+        <div class="menu">
+            <button onclick="showContent('alphabet')">Alphabet</button>
+            <button onclick="showContent('syntax')">Syntax</button>
+            <button onclick="showContent('example')">Example</button>
+            <button onclick="showContent('editor')">Editor</button>
+            <button onclick="showContent('imageGenerator')">Image Generator</button>
+        </div>
+        <div id="alphabet" class="content">
+            <h2>Alphabet</h2>
+            <pre id="alphabetList"></pre>
+        </div>
+        <div id="syntax" class="content">
+            <h2>Syntax</h2>
+            <pre id="syntaxList"></pre>
+        </div>
+        <div id="example" class="content">
+            <h2>Example Script</h2>
+            <pre id="exampleScript"></pre>
+        </div>
+        <div id="editor" class="content">
+            <h2>Editor</h2>
+            <textarea id="codeEditor"></textarea>
+            <button onclick="runScript()">Run Script</button>
+            <button onclick="saveScript()">Save Script</button>
+            <button onclick="exportContent()">Export</button>
+            <div id="scriptOutput"></div>
+        </div>
+        <div id="imageGenerator" class="content">
+            <h2>Image Generator</h2>
+            <input type="file" id="imageInput1" accept="image/*">
+            <input type="file" id="imageInput2" accept="image/*">
+            <button onclick="generateImage()">Generate Image</button>
+            <button onclick="saveAsJPG()">Save as JPG</button>
+            <div id="imageContainer"></div>
+        </div>
+    </div>
+    <script>
+        // JavaScript functions for handling UI interactions
+        function showContent(contentId) {
+            document.querySelectorAll('.content').forEach(content => content.style.display = 'none');
+            document.getElementById(contentId).style.display = 'block';
+        }
+        function runScript() {
+            // Code to run the script
+        }
+        function saveScript() {
+            // Code to save the script
+        }
+        function exportContent() {
+            // Code to export content
+        }
+        function generateImage() {
+            // Code to generate combined image
+        }
+        function saveAsJPG() {
+            // Code to save image as JPG
+        }
+    </script>
+</body>
+</html>
